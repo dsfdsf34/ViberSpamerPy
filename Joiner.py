@@ -51,8 +51,15 @@ def load_coordinates(file_path='coords.json'):
 
 # Функция для сохранения координат в файл
 def save_coordinates(coords, file_path='coords.json'):
+    # Загружаем текущие координаты
+    existing_coords = load_coordinates(file_path)
+
+    # Обновляем только нужные координаты
+    for key in coords:
+        existing_coords[key] = coords[key]
+
     with open(file_path, 'w') as file:
-        json.dump(coords, file)
+        json.dump(existing_coords, file)
 
 
 # Функция для сохранения состояния (пути к файлу и строк)
@@ -222,23 +229,40 @@ if __name__ == "__main__":
             coords['search'].append(tuple(saved_coords[str(i)]['search']))
             coords['select'].append(tuple(saved_coords[str(i)]['select']))
     else:
+        # Получаем координаты для каждого окна
+        for i in range(window_count):
+            overwrite = input(f"Перезаписать координаты для окна {i + 1}? (y/n): ").strip().lower()
+            if overwrite == 'y':
+                coords['window'].append(get_coordinates("активация окна", i))
+                coords['link'].append(get_coordinates("клик на ссылку", i))
+                coords['join'].append(get_coordinates("клик на кнопку 'Присоединиться'", i))
+                coords['search'].append(get_coordinates("клик для поиска", i))
+                coords['select'].append(get_coordinates("клик для выбора контакта", i))
+            else:
+                coords['window'].append(tuple(saved_coords[str(i)]['window']))
+                coords['link'].append(tuple(saved_coords[str(i)]['link']))
+                coords['join'].append(tuple(saved_coords[str(i)]['join']))
+                coords['search'].append(tuple(saved_coords[str(i)]['search']))
+                coords['select'].append(tuple(saved_coords[str(i)]['select']))
+
         # Сохраняем координаты для каждого окна
         for i in range(window_count):
-            coords['window'].append(get_coordinates("активации окна Viber", i))
-            coords['link'].append(get_coordinates("клика на отправленную ссылку", i))
-            coords['join'].append(get_coordinates("клика на кнопку 'Присоединиться'", i))
-            coords['search'].append(get_coordinates("клика на поле поиска", i))
-            coords['select'].append(get_coordinates("клика на выбор контакта", i))
+            save_coordinates({
+                str(i): {
+                    'window': coords['window'][i],
+                    'link': coords['link'][i],
+                    'join': coords['join'][i],
+                    'search': coords['search'][i],
+                    'select': coords['select'][i],
+                }
+            })
 
-        # Сохраняем координаты в файл
-        save_coordinates(coords)
-
-    # Сохраняем состояние перед началом выполнения
+    # Сохраняем состояние
     save_state(excel_file, start_rows)
 
     # Пауза 3 секунды перед началом выполнения
     print("Начинаем через 3 секунды...")
     time.sleep(3)
 
-    # Запуск автоматизации
+    # Запускаем автоматизацию
     automate_viber_process(excel_file, total_cycles, start_rows, window_count, coords)
