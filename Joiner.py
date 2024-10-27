@@ -125,9 +125,17 @@ def automate_viber_process(excel_file, total_cycles, start_rows, window_count, c
             pyautogui.press('enter')
             time.sleep(1)
 
+            # Нажимаем 2 Enter после клика на отправленной ссылке
+            pyautogui.press('enter')
+            time.sleep(1)
+
             # 5. Нажать кнопку "Присоединиться"
             pyautogui.click(coords['join'][window_index])
             time.sleep(2)
+
+            # Нажимаем 3 Enter после клика на отправленной ссылке
+            pyautogui.press('enter')
+            time.sleep(1)
 
             # 6. Открываем поиск контактов
             pyautogui.click(coords['search'][window_index])
