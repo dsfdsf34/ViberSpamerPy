@@ -2,6 +2,7 @@ import time
 import keyboard
 import os
 import threading
+import json
 from openpyxl import load_workbook
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -10,7 +11,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 print("F8 Пауза/Возобновление скрипта")
 
 # Путь к файлу настроек
-settings_file = "settings.txt"
+settings_file = "settings.json"
 pause_flag = False
 
 
@@ -25,20 +26,32 @@ def toggle_pause():
 
 
 def read_settings():
-    """Чтение настроек из файла."""
+    """Чтение настроек из файла JSON."""
     if os.path.exists(settings_file):
-        with open(settings_file, "r") as file:
-            path_to_excel = file.readline().strip()
-            start_row = int(file.readline().strip())
-            return path_to_excel, start_row
+        print(f"Файл настроек найден: {settings_file}")  # Отладочное сообщение
+        with open(settings_file, "r", encoding="utf-8") as file:
+            try:
+                settings = json.load(file)
+                print(f"Содержимое файла настроек: {settings}")  # Отладочное сообщение
+                return settings.get("path_to_excel"), settings.get("start_row")
+            except json.JSONDecodeError:
+                print("Ошибка в формате JSON в файле настроек.")
+                return None, None
     else:
+        print("Файл настроек не найден.")
         return None, None
 
 
 def save_settings(path_to_excel, start_row):
-    """Сохранение настроек в файл."""
-    with open(settings_file, "w") as file:
-        file.write(f"{path_to_excel}\n{start_row}\n")
+    """Сохранение настроек в файл JSON."""
+    settings = {
+        "path_to_excel": path_to_excel,
+        "start_row": start_row
+    }
+
+    with open(settings_file, "w", encoding="utf-8") as file:
+        json.dump(settings, file, ensure_ascii=False, indent=4)
+    print("Настройки сохранены.")
 
 
 def check_viber_group_status(link, driver):
@@ -53,8 +66,12 @@ def check_viber_group_status(link, driver):
         invalid_texts = [
             "Ссылка приглашения неактивна",
             "Срок действия приглашения истек",
-            "группа не существует",
-            "Страница не найдена"
+            "Группа не существует",
+            "Страница не найдена",
+            "Ссылка не активна",
+            "Ссылка неактивна",
+            "Ссылка не найдена",
+            "Группа не найдена"
         ]
         page_source = driver.page_source
         if any(text in page_source for text in invalid_texts):
@@ -78,17 +95,21 @@ def main():
 
     if use_settings == "y":
         path_to_excel, start_row = read_settings()
-        if path_to_excel and start_row:
-            print(f"Используем настройки: путь к файлу Excel - {path_to_excel}, начало с строки {start_row}")
-        else:
+        if path_to_excel is None or start_row is None:
             print("Настройки не найдены. Пожалуйста, укажите путь и начальную строку вручную.")
             path_to_excel = input("Введите путь к файлу Excel с ссылками: ")
-            start_row = int(input(f"С какой строки начать проверку? (по умолчанию 2): ") or 2)
+            start_row = int(input(f"С какой строки начать проверку? (по умолчанию 0): ") or 0)
             save_settings(path_to_excel, start_row)
+        else:
+            print(f"Используем настройки: путь к файлу Excel - {path_to_excel}, начало с строки {start_row}")
+            # Запрашиваем начальную строку, даже если она была в настройках
+            start_row_input = input(f"Использовать строку {start_row} как начальную? Если нет, введите другую строку: ")
+            start_row = int(start_row_input) if start_row_input else start_row
+            save_settings(path_to_excel, start_row)  # Обновляем настройки, если начальная строка изменена
     else:
-        # Если не используется файл настроек, запрашиваем путь и начальную строку вручную
         path_to_excel = input("Введите путь к файлу Excel с ссылками: ")
-        start_row = int(input(f"С какой строки начать проверку? (по умолчанию 2): ") or 2)
+        start_row = int(input(f"С какой строки начать проверку? (по умолчанию 0): ") or 0)
+        save_settings(path_to_excel, start_row)
 
     # Загрузка файла Excel
     try:
