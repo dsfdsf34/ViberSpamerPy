@@ -11,6 +11,9 @@ from webdriver_manager.chrome import ChromeDriverManager
 # Путь для неактивных ссылок
 inactive_links_file = "inactive_links.txt"
 
+# Путь для активных ссылок
+active_links_file = "active_links.txt"
+
 # Настройки
 settings_file = "settings.json"
 pause_flag = False
@@ -49,9 +52,9 @@ def save_settings(path_to_excel, start_row, end_row):
     print("Настройки сохранены.")
 
 
-def log_message(message):
-    """Запись сообщений в файл неактивных ссылок с номером строки"""
-    with open(inactive_links_file, "a", encoding="utf-8") as f:
+def log_message(message, file_path):
+    """Запись сообщений в файл активных или неактивных ссылок с номером строки"""
+    with open(file_path, "a", encoding="utf-8") as f:
         f.write(message + "\n")
 
 
@@ -75,7 +78,7 @@ def check_viber_group_status(link, driver, invalid_texts):
         driver.switch_to.window(driver.window_handles[0])
 
 
-def process_links(start_row, end_row, path_to_excel, delete_links, invalid_texts):
+def process_links(start_row, end_row, path_to_excel, invalid_texts):
     """Обработка ссылок в Excel"""
     try:
         workbook = load_workbook(path_to_excel)
@@ -85,7 +88,6 @@ def process_links(start_row, end_row, path_to_excel, delete_links, invalid_texts
         return
 
     driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()))
-    rows_to_delete = []
 
     # Процесс перебора строк с учетом start_row и end_row
     for row_idx, row in enumerate(sheet.iter_rows(min_row=start_row, max_row=end_row, max_col=1, values_only=True),
@@ -95,24 +97,24 @@ def process_links(start_row, end_row, path_to_excel, delete_links, invalid_texts
             status = check_viber_group_status(link, driver, invalid_texts)
             print(f'Поток "{threading.current_thread().name}" Строка: "{row_idx}" {link} - Статус: {status}')
 
-            # Записываем только неактивные ссылки в файл
-            if status == "Неактивна":
-                log_message(f"{link}")
-
-            if status == "Неактивна" and delete_links:
-                rows_to_delete.append(row_idx)
-
-    if delete_links:
-        rows_to_delete = sorted(rows_to_delete, reverse=True)
-        for row_idx in rows_to_delete:
-            try:
-                sheet.delete_rows(row_idx)
-                print(f"Строка {row_idx} удалена")
-            except Exception as e:
-                print(f"Ошибка при удалении строки {row_idx}: {e}")
-        workbook.save(path_to_excel)
+            # Записываем ссылку в соответствующий файл в зависимости от статуса
+            if status == "Активна":
+                log_message(f"{link}", active_links_file)
+            else:
+                log_message(f"{link}", inactive_links_file)
 
     driver.quit()
+
+
+def get_total_rows(path_to_excel):
+    """Получение общего количества строк в Excel"""
+    try:
+        workbook = load_workbook(path_to_excel)
+        sheet = workbook.active
+        return sheet.max_row
+    except Exception as e:
+        print(f"Ошибка при загрузке файла Excel: {e}")
+        return 0
 
 
 def get_rows_per_thread(start_row, end_row, num_threads):
@@ -136,6 +138,7 @@ def main():
     # Переменные для пути и начальной строки
     path_to_excel = None
     start_row = None
+    end_row = None  # Инициализируем end_row
 
     use_saved_settings = input("Использовать сохраненные настройки? (y/n): ").lower()
     if use_saved_settings == "y":
@@ -147,13 +150,41 @@ def main():
     if use_saved_settings == "n":
         path_to_excel = input("Введите путь к файлу Excel с ссылками: ")
         start_row = int(input("С какой строки начать проверку? (по умолчанию 0): ") or 0)
-        end_row = int(input(f"До какой строки проверять? (по умолчанию {start_row + 100}): ") or start_row + 100)
+
+        total_rows = get_total_rows(path_to_excel)  # Получаем общее количество строк в таблице
+        print(f"В таблице найдено {total_rows} строк.")  # Сообщаем количество строк
+
+        # Устанавливаем максимальное количество строк по умолчанию
+        default_end_row = total_rows
+        end_row_input = input(f"До какой строки проверять? (по умолчанию {default_end_row}): ")
+
+        # Если поле пустое, сообщаем, что будет использовано всё количество строк
+        if not end_row_input:
+            print(f"Будут использованы все строки (до {default_end_row}).")
+            end_row = total_rows
+        else:
+            end_row = int(end_row_input)
+
+        # Если указана строка, превышающая общее количество, то обработать все строки
+        if end_row > total_rows:
+            print(f"В таблице всего {total_rows} строк. Будем обрабатывать все строки.")
+            end_row = total_rows
+
         save_settings(path_to_excel, start_row, end_row)
     else:
-        start_row = int(input(f"Введите начальную строку для продолжения (текущее значение {start_row}): ") or start_row)
-        end_row = int(input(f"Введите конечную строку для продолжения (текущее значение {start_row + 100}): ") or start_row + 100)
+        total_rows = get_total_rows(path_to_excel)
+        print(f"В таблице найдено {total_rows} строк.")  # Сообщаем количество строк
 
-    delete_links = input("Удалять неактивные ссылки из таблицы? (y/n): ").lower() == "y"
+        # Если указана строка, превышающая общее количество, то обработать все строки
+        if end_row > total_rows:
+            print(f"В таблице всего {total_rows} строк. Будем обрабатывать все строки.")
+            end_row = total_rows
+
+        start_row = int(
+            input(f"Введите начальную строку для продолжения (текущее значение {start_row}): ") or start_row)
+        end_row = int(
+            input(f"Введите конечную строку для продолжения (текущее значение {start_row + 100}): ") or end_row)
+
     num_threads = int(input("Введите количество потоков для проверки: "))
 
     # Запросить выбор стандартных или собственных слов
@@ -182,7 +213,7 @@ def main():
     threads = []
     for i, (thread_start_row, thread_end_row) in enumerate(thread_ranges):
         thread = threading.Thread(target=process_links,
-                                  args=(thread_start_row, thread_end_row, path_to_excel, delete_links, invalid_texts))
+                                  args=(thread_start_row, thread_end_row, path_to_excel, invalid_texts))
         threads.append(thread)
         thread.start()
 
