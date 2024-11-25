@@ -1,9 +1,9 @@
 import time
-import keyboard
 import threading
 import json
 import os
 import re
+import keyboard
 from openpyxl import load_workbook, Workbook
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -11,6 +11,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, WebDriverException
 from urllib.parse import unquote
+from queue import Queue
 
 # Путь для файла Excel с активными ссылками
 excel_file = "active_links.xlsx"
@@ -19,6 +20,13 @@ inactive_links_file = "inactive_links.txt"
 # Путь для сохранения настроек
 settings_file = "settings.json"
 pause_flag = False
+
+# Глобальные объекты Lock для синхронизации записи в файлы
+excel_lock = threading.Lock()
+text_lock = threading.Lock()
+
+# Очередь для безопасной передачи данных между потоками
+data_queue = Queue()
 
 
 def toggle_pause():
@@ -65,16 +73,28 @@ def create_excel_file():
 
 def save_to_excel(sheet_name, link, group_name, members_count):
     """Сохранение активных ссылок и названий групп в файл Excel"""
-    wb = load_workbook(excel_file)
-    sheet = wb[sheet_name]
-    sheet.append([link, group_name, members_count])
-    wb.save(excel_file)
+    data_queue.put(('excel', sheet_name, link, group_name, members_count))  # Помещаем данные в очередь
 
 
 def save_to_text(link):
     """Сохранение неактивных ссылок в текстовый файл"""
-    with open(inactive_links_file, "a", encoding="utf-8") as file:
-        file.write(link + "\n")
+    with text_lock:  # Захватываем блокировку для записи в текстовый файл
+        with open(inactive_links_file, "a", encoding="utf-8") as file:
+            file.write(link + "\n")
+
+
+def process_queue():
+    """Обработка данных из очереди для записи в файлы"""
+    while True:
+        item = data_queue.get()
+        if item[0] == 'excel':
+            sheet_name, link, group_name, members_count = item[1], item[2], item[3], item[4]
+            with excel_lock:  # Захватываем блокировку для записи в Excel
+                wb = load_workbook(excel_file)
+                sheet = wb[sheet_name]
+                sheet.append([link, group_name, members_count])
+                wb.save(excel_file)
+        data_queue.task_done()
 
 
 def get_members_count(driver, url):
@@ -100,7 +120,6 @@ def get_members_count(driver, url):
 
     # Попытка получить количество участников из второго варианта
     try:
-        # Используем XPath для нахождения элемента <li> и получаем его текст
         members_count_xpath = driver.find_element(By.XPATH,
                                                   '/html/body/app-root/vbr-page/vbr-content/app-main/app-account/article/section[2]/div[1]/div[1]/app-account-info/div/ul/li[1]').text.strip()
 
@@ -109,13 +128,29 @@ def get_members_count(driver, url):
 
         # Преобразуем строку в число (целое число)
         if members_count_str:
-            members_count = int(members_count_str)  # Преобразуем строку в целое число
-
-            # Теперь в переменной members_count число, которое можно вставить в таблицу
-            return members_count
+            return int(members_count_str)  # Преобразуем строку в целое число
     except Exception as e:
         print(f"Ошибка при извлечении количества участников из второго варианта: {e}")
+
+    # Попытка получить количество участников из третьего варианта
+    try:
+        # Новый вариант XPath
+        members_count_xpath_2 = driver.find_element(By.XPATH,
+                                                    '/html/body/app-root/vbr-page/vbr-content/app-main/app-account/article/section[2]/div[1]/div[1]/app-account-info/div/ul/li[2]').text.strip()
+
+        # Извлекаем только цифры из строки
+        members_count_str_2 = re.sub(r'\D', '', members_count_xpath_2)  # Удаляем все, кроме цифр
+
+        # Преобразуем строку в число (целое число)
+        if members_count_str_2:
+            return int(members_count_str_2)  # Преобразуем строку в целое число
+    except Exception as e:
+        print(f"Ошибка при извлечении количества участников из третьего варианта: {e}")
         return "Неизвестно"
+
+    # Если все три варианта не сработали
+    return "Неизвестно"
+
 
 
 def check_viber_group_status(link, driver, invalid_texts):
@@ -165,53 +200,47 @@ def check_viber_group_status(link, driver, invalid_texts):
 
 
 def process_links(start_row, end_row, path_to_excel, invalid_texts):
-    """Обработка ссылок в Excel"""
-    try:
-        workbook = load_workbook(path_to_excel)
-        sheet = workbook.active
-    except Exception as e:
-        print(f"Ошибка при загрузке файла Excel: {e}")
-        return
+    """Обработка ссылок в указанном диапазоне строк"""
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")  # Запуск в фоновом режиме
+    driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
 
-    driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()))
+    wb = load_workbook(path_to_excel)
+    sheet = wb.active
 
-    for row_idx, row in enumerate(sheet.iter_rows(min_row=start_row, max_row=end_row, max_col=1, values_only=True),
-                                  start=start_row):
-        link = row[0]
-        if link:
-            status, group_name, members_count = check_viber_group_status(link, driver, invalid_texts)
-            print(
-                f'Поток "{threading.current_thread().name}" Строка: "{row_idx}" {link} - Статус: {status} - Название группы: {group_name} - Количество участников: {members_count}')
+    for row in range(start_row, end_row + 1):
+        link = sheet.cell(row=row, column=1).value
+        status, group_name, members_count = check_viber_group_status(link, driver, invalid_texts)
 
-            if status == "Активна":
-                save_to_excel("Активные ссылки", link, group_name, members_count)
-            else:
-                save_to_text(link)
+        if status == "Активна":
+            save_to_excel("Активные ссылки", link, group_name, members_count)
+        else:
+            save_to_text(link)
 
     driver.quit()
 
 
 def get_total_rows(path_to_excel):
     """Получение общего количества строк в Excel"""
-    try:
-        workbook = load_workbook(path_to_excel)
-        sheet = workbook.active
-        return sheet.max_row
-    except Exception as e:
-        print(f"Ошибка при загрузке файла Excel: {e}")
-        return 0
+    wb = load_workbook(path_to_excel)
+    sheet = wb.active
+    return sheet.max_row
 
 
 def get_rows_per_thread(start_row, end_row, num_threads):
-    """Рассчитывает, сколько строк обрабатывать каждому потоку"""
+    """Разделение строк между потоками"""
     total_rows = end_row - start_row + 1
     rows_per_thread = total_rows // num_threads
     remaining_rows = total_rows % num_threads
 
     thread_ranges = []
     current_row = start_row
+
     for i in range(num_threads):
-        end_row_for_thread = current_row + rows_per_thread + (1 if i < remaining_rows else 0) - 1
+        end_row_for_thread = current_row + rows_per_thread - 1
+        if remaining_rows > 0:
+            end_row_for_thread += 1
+            remaining_rows -= 1
         thread_ranges.append((current_row, end_row_for_thread))
         current_row = end_row_for_thread + 1
 
@@ -253,6 +282,10 @@ def main():
     if not os.path.exists(excel_file):
         create_excel_file()
 
+    # Запуск потока для обработки данных из очереди
+    queue_thread = threading.Thread(target=process_queue, daemon=True)
+    queue_thread.start()
+
     thread_ranges = get_rows_per_thread(start_row, end_row, num_threads)
     threads = []
 
@@ -265,11 +298,15 @@ def main():
     for thread in threads:
         thread.join()
 
+    # Ожидаем завершения обработки очереди
+    data_queue.join()
+
     print("Обработка завершена.")
 
 
 if __name__ == "__main__":
-    pause_thread = threading.Thread(target=toggle_pause)
-    pause_thread.daemon = True
+    # Запуск потока для паузы
+    pause_thread = threading.Thread(target=toggle_pause, daemon=True)
     pause_thread.start()
+
     main()
