@@ -61,6 +61,9 @@ def save_settings(path_to_excel, start_row, end_row):
         json.dump(settings, file, ensure_ascii=False, indent=4)
     print("Настройки сохранены.")
 
+def print_status(message):
+    """Функция для вывода текущего состояния"""
+    print(f"[{time.strftime('%H:%M:%S')}] {message}")
 
 def create_excel_file():
     """Создание нового Excel файла для активных ссылок"""
@@ -75,7 +78,6 @@ def save_to_excel(sheet_name, link, group_name, members_count):
     """Сохранение активных ссылок и названий групп в файл Excel"""
     data_queue.put(('excel', sheet_name, link, group_name, members_count))  # Помещаем данные в очередь
 
-
 def save_to_text(link):
     """Сохранение неактивных ссылок в текстовый файл"""
     with text_lock:  # Захватываем блокировку для записи в текстовый файл
@@ -84,17 +86,38 @@ def save_to_text(link):
 
 
 def process_queue():
-    """Обработка данных из очереди для записи в файлы"""
+    """Обработка данных из очереди для записи в файлы с буферизацией"""
+    buffer = []
+    buffer_size = 100  # Размер буфера перед записью в файл
+    print_status("Запуск обработки очереди...")
+
     while True:
         item = data_queue.get()
         if item[0] == 'excel':
-            sheet_name, link, group_name, members_count = item[1], item[2], item[3], item[4]
-            with excel_lock:  # Захватываем блокировку для записи в Excel
-                wb = load_workbook(excel_file)
-                sheet = wb[sheet_name]
-                sheet.append([link, group_name, members_count])
-                wb.save(excel_file)
+            # Сохраняем данные в буфер
+            buffer.append(item[1:])
+            if len(buffer) >= buffer_size:
+                flush_buffer_to_excel(buffer)
+                buffer.clear()
         data_queue.task_done()
+
+        # Сигнал завершения работы
+        if item == "STOP":
+            # Сохраняем оставшиеся данные из буфера
+            if buffer:
+                flush_buffer_to_excel(buffer)
+            print_status("Обработка очереди завершена.")
+            break
+
+
+def flush_buffer_to_excel(buffer):
+    """Записывает данные из буфера в Excel"""
+    with excel_lock:  # Захватываем блокировку для записи в Excel
+        wb = load_workbook(excel_file)
+        sheet = wb.active
+        for sheet_name, link, group_name, members_count in buffer:
+            sheet.append([link, group_name, members_count])
+        wb.save(excel_file)
 
 
 def get_members_count(driver, url):
@@ -116,7 +139,7 @@ def get_members_count(driver, url):
         if members_count:
             return members_count
     except Exception as e:
-        print(f"Ошибка при извлечении количества участников из первого варианта: {e}")
+        print(f"Ошибка извлечения участников 1: {str(e).split(':', 1)[0]}")
 
     # Попытка получить количество участников из второго варианта
     try:
@@ -130,7 +153,7 @@ def get_members_count(driver, url):
         if members_count_str:
             return int(members_count_str)  # Преобразуем строку в целое число
     except Exception as e:
-        print(f"Ошибка при извлечении количества участников из второго варианта: {e}")
+        print(f"Ошибка извлечения участников 2: {str(e).split(':', 1)[0]}")
 
     # Попытка получить количество участников из третьего варианта
     try:
@@ -145,10 +168,10 @@ def get_members_count(driver, url):
         if members_count_str_2:
             return int(members_count_str_2)  # Преобразуем строку в целое число
     except Exception as e:
-        print(f"Ошибка при извлечении количества участников из третьего варианта: {e}")
-        return "Неизвестно"
+        print(f"Ошибка извлечения участников 3: {str(e).split(':', 1)[0]}")
 
     # Если все три варианта не сработали
+    print("Все попытки извлечения участников не удались. 'Неизвестно'.")
     return "Неизвестно"
 
 
@@ -201,6 +224,7 @@ def check_viber_group_status(link, driver, invalid_texts):
 
 def process_links(start_row, end_row, path_to_excel, invalid_texts):
     """Обработка ссылок в указанном диапазоне строк"""
+    print_status(f"Начало обработки ссылок с {start_row} по {end_row}...")
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")  # Запуск в фоновом режиме
     driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
@@ -216,6 +240,8 @@ def process_links(start_row, end_row, path_to_excel, invalid_texts):
             save_to_excel("Активные ссылки", link, group_name, members_count)
         else:
             save_to_text(link)
+
+        print_status(f"Обработана ссылка: {link}, Статус: {status}, Группа: {group_name}, Участников: {members_count}")
 
     driver.quit()
 
@@ -298,8 +324,11 @@ def main():
     for thread in threads:
         thread.join()
 
+    # Посылаем сигнал завершения для потока записи
+    data_queue.put("STOP")
+
     # Ожидаем завершения обработки очереди
-    data_queue.join()
+    queue_thread.join()
 
     print("Обработка завершена.")
 
