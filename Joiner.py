@@ -4,6 +4,7 @@ import time
 import keyboard
 import json
 import os
+import random
 import sys  # Для выхода из скрипта
 
 print(f"F8 для паузы/возобновления во время цикла")
@@ -80,6 +81,13 @@ def load_state(state_file='state.json'):
     return {"excel_path": "", "start_rows": []}
 
 
+def random_pause(min_sleep, max_sleep):
+    """Случайная задержка в заданном диапазоне"""
+    random_sleep = random.randint(min_sleep, max_sleep)
+    time.sleep(random_sleep)    # print(f"Задержка: {random_sleep} секунд.")
+
+
+
 # Основная функция автоматизации
 def automate_viber_process(excel_file, total_cycles, start_rows, window_count, coords):
     global last_processed_rows  # Указываем, что это глобальная переменная
@@ -106,47 +114,47 @@ def automate_viber_process(excel_file, total_cycles, start_rows, window_count, c
 
             # Получаем ссылку из Excel для текущего окна
             group_link = df.iloc[start_rows[window_index], 0]  # Предполагаем, что ссылки в первом столбце
-            print(f"Обработка окна {window_index + 1}, строка {start_rows[window_index] + 1}")
+            print(f"Обработка окна {window_index + 1}, строка {start_rows[window_index] + 2}")
 
             # 2. Активация нужного окна Viber
             pyautogui.click(coords['window'][window_index])
-            time.sleep(0.5)
+            random_pause(1, 2)
 
             # 3. Вставка ссылки и отправка сообщения
             pyautogui.write(group_link)
             pyautogui.press('enter')
-            time.sleep(2)
+            random_pause(2, 3)
 
             # 4. Клик на отправленной ссылке
             pyautogui.click(coords['link'][window_index])
-            time.sleep(2)
+            random_pause(2, 3)
 
             # Нажимаем Enter после клика на отправленной ссылке
             pyautogui.press('enter')
-            time.sleep(1)
+            random_pause(2, 3)
 
             # Нажимаем 2 Enter после клика на отправленной ссылке
             pyautogui.press('enter')
-            time.sleep(1)
+            random_pause(2, 3)
 
             # 5. Нажать кнопку "Присоединиться"
             pyautogui.click(coords['join'][window_index])
-            time.sleep(2)
+            random_pause(2, 3)
 
             # Нажимаем 3 Enter после клика на отправленной ссылке
             pyautogui.press('enter')
-            time.sleep(1)
+            random_pause(1, 2)  # Рандомная задержка от 40 до 100 секунд
 
             # 6. Открываем поиск контактов
             pyautogui.click(coords['search'][window_index])
-            time.sleep(1)
+            random_pause(2, 3)
 
             # 7. Выбор контакта
             pyautogui.click(coords['select'][window_index])
-            time.sleep(1)
+            random_pause(2, 3)
 
             # Увеличиваем номер строки для текущего окна
-            last_processed_rows[window_index] = start_rows[window_index] + 1
+            last_processed_rows[window_index] = start_rows[window_index]
             start_rows[window_index] += 1
 
             # Увеличиваем счетчик обработанных строк
@@ -156,7 +164,7 @@ def automate_viber_process(excel_file, total_cycles, start_rows, window_count, c
     print("Все циклы завершены.")
     print("Последние обработанные строки для каждого окна:")
     for i in range(window_count):
-        print(f"Окно {i + 1}: строка {last_processed_rows[i]}")
+        print(f"Окно {i + 1}: строка {last_processed_rows[i] + 2}")
     print("Время завершения:", time.strftime("%H:%M:%S"))
 
 
@@ -212,7 +220,8 @@ if __name__ == "__main__":
         last_row = state['start_rows'][i] if i < len(state['start_rows']) else 0
         start_row = input(
             f"Введите начальную строку для окна {i + 1} (или нажмите Enter, чтобы использовать последнюю: {last_row}): ")
-        start_rows.append(int(start_row) if start_row else last_row)
+        # Преобразуем введенную строку из 1-базированной в 0-базированную для индексации в Pandas
+        start_rows.append(int(start_row) - 1 if start_row else last_row)
 
     # Запрашиваем количество циклов
     total_cycles = int(input("Введите количество циклов: "))
