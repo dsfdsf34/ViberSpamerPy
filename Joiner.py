@@ -118,7 +118,7 @@ def automate_viber_process(excel_file, total_cycles, start_rows, window_count, c
 
             # 2. Активация нужного окна Viber
             pyautogui.click(coords['window'][window_index])
-            random_pause(1, 2)
+            random_pause(2, 3)
 
             # 3. Вставка ссылки и отправка сообщения
             pyautogui.write(group_link)
@@ -127,11 +127,11 @@ def automate_viber_process(excel_file, total_cycles, start_rows, window_count, c
 
             # 4. Клик на отправленной ссылке
             pyautogui.click(coords['link'][window_index])
-            random_pause(2, 3)
+            random_pause(3, 4)
 
             # Нажимаем Enter после клика на отправленной ссылке
             pyautogui.press('enter')
-            random_pause(2, 3)
+            random_pause(3, 4)
 
             # Нажимаем 2 Enter после клика на отправленной ссылке
             pyautogui.press('enter')
@@ -143,11 +143,11 @@ def automate_viber_process(excel_file, total_cycles, start_rows, window_count, c
 
             # Нажимаем 3 Enter после клика на отправленной ссылке
             pyautogui.press('enter')
-            random_pause(1, 2)  # Рандомная задержка от 40 до 100 секунд
+            random_pause(2, 3)  # Рандомная задержка от 40 до 100 секунд
 
             # 6. Открываем поиск контактов
             pyautogui.click(coords['search'][window_index])
-            random_pause(2, 3)
+            random_pause(3, 4)
 
             # 7. Выбор контакта
             pyautogui.click(coords['select'][window_index])
