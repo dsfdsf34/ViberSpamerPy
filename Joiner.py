@@ -89,11 +89,12 @@ def random_pause(min_sleep, max_sleep):
 
 
 # Основная функция автоматизации
-def automate_viber_process(excel_file, total_cycles, start_rows, window_count, coords):
+def automate_viber_process(excel_file, total_cycles, start_rows, window_count, coords, sheet_numbers):
     global last_processed_rows  # Указываем, что это глобальная переменная
 
-    # Чтение данных из Excel
-    df = pd.read_excel(excel_file)
+    # Чтение данных из всех указанных листов
+    sheets = pd.ExcelFile(excel_file)
+    dfs = [sheets.parse(sheet_name=sheets.sheet_names[sheet_numbers[i]]) for i in range(window_count)]
 
     # Список для хранения последних обработанных строк для каждого окна
     last_processed_rows = [0] * window_count
@@ -102,8 +103,8 @@ def automate_viber_process(excel_file, total_cycles, start_rows, window_count, c
     for cycle in range(total_cycles):
         for window_index in range(window_count):
             # Проверяем, остались ли строки для обработки
-            if start_rows[window_index] >= len(df):
-                print(f"Нет больше строк для обработки в окне {window_index + 1}. Пропуск...")
+            if start_rows[window_index] >= len(dfs[window_index]):
+                print(f"Нет больше строк для обработки в листе окна {window_index + 1}. Пропуск...")
                 continue
 
             # Проверка на паузу
@@ -113,8 +114,8 @@ def automate_viber_process(excel_file, total_cycles, start_rows, window_count, c
                     time.sleep(1)  # Ждём, пока не нажмут F8
 
             # Получаем ссылку из Excel для текущего окна
-            group_link = df.iloc[start_rows[window_index], 0]  # Предполагаем, что ссылки в первом столбце
-            print(f"Обработка окна {window_index + 1}, строка {start_rows[window_index] + 2}")
+            group_link = dfs[window_index].iloc[start_rows[window_index], 0]  # Предполагаем, что ссылки в первом столбце
+            print(f"Обработка окна {window_index + 1}, строка {start_rows[window_index] + 2}, лист: {sheets.sheet_names[sheet_numbers[window_index]]}")
 
             # 2. Активация нужного окна Viber
             pyautogui.click(coords['window'][window_index])
@@ -164,7 +165,7 @@ def automate_viber_process(excel_file, total_cycles, start_rows, window_count, c
     print("Все циклы завершены.")
     print("Последние обработанные строки для каждого окна:")
     for i in range(window_count):
-        print(f"Окно {i + 1}: строка {last_processed_rows[i] + 2}")
+        print(f"Окно {i + 1}: лист '{sheets.sheet_names[sheet_numbers[i]]}', строка {last_processed_rows[i] + 2}")
     print("Время завершения:", time.strftime("%H:%M:%S"))
 
 
@@ -213,6 +214,12 @@ if __name__ == "__main__":
         f"Введите путь к файлу Excel (или нажмите Enter, чтобы использовать последний: '{state['excel_path']}'): ")
     if not excel_file:
         excel_file = state['excel_path']
+
+    # Запрашиваем номер листа для каждого окна
+    sheet_numbers = []
+    for i in range(window_count):
+        sheet_number = input(f"Введите номер листа для окна {i + 1} (начиная с 1): ")
+        sheet_numbers.append(int(sheet_number) - 1)  # Переводим в 0-базированный индекс для Pandas
 
     # Запрашиваем начальные строки для каждого окна или используем последние
     start_rows = []
@@ -282,4 +289,4 @@ if __name__ == "__main__":
     time.sleep(3)
 
     # Запускаем автоматизацию
-    automate_viber_process(excel_file, total_cycles, start_rows, window_count, coords)
+    automate_viber_process(excel_file, total_cycles, start_rows, window_count, coords, sheet_numbers)
