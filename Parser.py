@@ -192,6 +192,21 @@ def get_members_count(driver, url):
     except Exception as e:
         print(f"Ошибка извлечения участников 3: {str(e).split(':', 1)[0]}")
 
+    # Попытка получить количество участников из 4 варианта
+    try:
+        # Новый вариант XPath
+        members_count_xpath_3 = driver.find_element(By.XPATH,
+                                                    '/html/body/app-root/vbr-page/vbr-content/app-main/app-account/article/section/div[1]/div[1]/app-account-info/div/ul/li[1]').text.strip()
+
+        # Извлекаем только цифры из строки
+        members_count_str_3 = re.sub(r'\D', '', members_count_xpath_3)  # Удаляем все, кроме цифр
+
+        # Преобразуем строку в число (целое число)
+        if members_count_str_3:
+            return int(members_count_str_3)  # Преобразуем строку в целое число
+    except Exception as e:
+        print(f"Ошибка извлечения участников 4: {str(e).split(':', 1)[0]}")
+
     # Если все три варианта не сработали
     print("Все попытки извлечения участников не удались. 'Неизвестно'.")
     return "Неизвестно"
@@ -208,7 +223,6 @@ def check_viber_group_status(link, driver, invalid_texts):
 
         try:
             group_name_1 = driver.find_element(By.XPATH, '/html/body/div/div[2]/div[1]/div[2]/h2').text
-            time.sleep(1)  # Задержка после поиска элемента
         except NoSuchElementException:
             group_name_1 = None
 
@@ -218,7 +232,20 @@ def check_viber_group_status(link, driver, invalid_texts):
         except NoSuchElementException:
             group_name_2 = None
 
-        group_name = group_name_1 if group_name_1 else (group_name_2 if group_name_2 else "Неизвестное название")
+        try:
+            group_name_3 = driver.find_element(By.XPATH,
+                                               '/html/body/app-root/vbr-page/vbr-content/app-main/app-account/article/section/div[1]/div[1]/div[1]/h2').text
+        except NoSuchElementException:
+            group_name_3 = None
+
+        if group_name_1:
+            group_name = group_name_1
+        elif group_name_2:
+            group_name = group_name_2
+        elif group_name_3:
+            group_name = group_name_3
+        else:
+            group_name = "Неизвестное название"
 
         # Извлекаем количество участников
         members_count = get_members_count(driver, link)
