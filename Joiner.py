@@ -7,6 +7,8 @@ import os
 import random
 import sys  # Для выхода из скрипта
 
+pyautogui.FAILSAFE = False
+
 print(f"F8 для паузы/возобновления во время цикла")
 print(f"F9 для сохранения текущих координат курсора")
 print(f"F10 для прерывания скрипта")
