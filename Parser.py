@@ -207,7 +207,22 @@ def get_members_count(driver, url):
     except Exception as e:
         print(f"Ошибка извлечения участников 4: {str(e).split(':', 1)[0]}")
 
-    # Если все три варианта не сработали
+    # Попытка получить количество участников из 5 варианта
+    try:
+        # Новый вариант XPath
+        members_count_xpath_4 = driver.find_element(By.XPATH,
+                                                    '/html/body/app-root/vbr-page/vbr-content/app-main/app-account/article/section/div[1]/div[1]/app-account-info/div/ul/li[2]').text.strip()
+
+        # Извлекаем только цифры из строки
+        members_count_str_3 = re.sub(r'\D', '', members_count_xpath_4)  # Удаляем все, кроме цифр
+
+        # Преобразуем строку в число (целое число)
+        if members_count_str_3:
+            return int(members_count_str_3)  # Преобразуем строку в целое число
+    except Exception as e:
+        print(f"Ошибка извлечения участников 5: {str(e).split(':', 1)[0]}")
+
+    # Если все варианты не сработали
     print("Все попытки извлечения участников не удались. 'Неизвестно'.")
     return "Неизвестно"
 
