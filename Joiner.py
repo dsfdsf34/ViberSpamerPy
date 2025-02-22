@@ -5,6 +5,7 @@ import keyboard
 import json
 import os
 import random
+import requests
 import sys  # Для выхода из скрипта
 
 pyautogui.FAILSAFE = False
@@ -88,7 +89,36 @@ def random_pause(min_sleep, max_sleep):
     random_sleep = random.randint(min_sleep, max_sleep)
     time.sleep(random_sleep)    # print(f"Задержка: {random_sleep} секунд.")
 
+def send_telegram_notification(message):
+    TOKEN = "7697342624:AAEmf78kAX7nEXQssPmw-impxi0XVY5dQYE"  # Укажи свой токен
+    CHAT_ID = "850143597"  # Укажи свой chat_id
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": message
+    }
+    requests.post(url, data=payload)
 
+def format_time(minutes):
+    hours = minutes // 60
+    minutes = minutes % 60
+
+    # Если количество минут — целое число, убираем десятичную точку
+    if minutes.is_integer():
+        minutes = int(minutes)
+
+    # Формируем строку в формате "Xh Ym"
+    time_str = f"{int(hours)}h {minutes}m"
+    return time_str
+
+# Функция для вычисления времени выполнения скрипта
+def estimate_time(total_cycles, window_count, processed_count, time_per_cycle):
+    remaining_cycles = total_cycles * window_count - sum(processed_count)  # Время на обработку 1 итерации
+    total_remaining_time = remaining_cycles * time_per_cycle
+    return total_remaining_time
+
+# Время на один цикл — 30 секунд (0.5 минуты)
+time_per_cycle = 0.5
 
 # Основная функция автоматизации
 def automate_viber_process(excel_file, total_cycles, start_rows, window_count, coords, sheet_numbers):
@@ -101,6 +131,11 @@ def automate_viber_process(excel_file, total_cycles, start_rows, window_count, c
     # Список для хранения последних обработанных строк для каждого окна
     last_processed_rows = [0] * window_count
     processed_count = [0] * window_count  # Счетчик обработанных строк для каждого окна
+
+    # Ожидаемое время завершения
+    estimated_time_minutes = estimate_time(total_cycles, window_count, processed_count, time_per_cycle)
+    formatted_time = format_time(estimated_time_minutes)
+    send_telegram_notification(f"Joiner начал работу.\nОжидаемое время завершения через: {formatted_time}")
 
     for cycle in range(total_cycles):
         for window_index in range(window_count):
@@ -165,6 +200,8 @@ def automate_viber_process(excel_file, total_cycles, start_rows, window_count, c
             print(f"Окно {window_index + 1}: +{processed_count[window_index]} строк обработано")
 
     print("Все циклы завершены.")
+    # Отправка уведомления в Telegram
+    send_telegram_notification("Все циклы завершены.")
     print("Последние обработанные строки для каждого окна:")
     for i in range(window_count):
         print(f"Окно {i + 1}: лист '{sheets.sheet_names[sheet_numbers[i]]}', строка {last_processed_rows[i] + 2}")
@@ -209,7 +246,15 @@ if __name__ == "__main__":
     saved_coords = load_coordinates()
 
     # Запрашиваем количество окон Viber
-    window_count = int(input("Введите количество окон Viber (от 1 до 6): "))
+    while True:
+        try:
+            window_count = int(input("Введите количество окон Viber: "))
+            if window_count < 1:
+                print("Количество окон должно быть больше 0.")
+            else:
+                break
+        except ValueError:
+            print("Пожалуйста, введите целое число.")
 
     # Запрашиваем путь к файлу Excel или используем последний
     excel_file = input(
