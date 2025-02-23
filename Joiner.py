@@ -1,6 +1,7 @@
 import pandas as pd
 import pyautogui
 import time
+import pygetwindow as gw
 import keyboard
 import json
 import os
@@ -90,8 +91,8 @@ def random_pause(min_sleep, max_sleep):
     time.sleep(random_sleep)    # print(f"Задержка: {random_sleep} секунд.")
 
 def send_telegram_notification(message):
-    TOKEN = ""  # Укажи свой токен
-    CHAT_ID = ""  # Укажи свой chat_id
+    TOKEN = "7697342624:AAEmf78kAX7nEXQssPmw-impxi0XVY5dQYE"  # Укажи свой токен
+    CHAT_ID = "850143597"  # Укажи свой chat_id
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {
         "chat_id": CHAT_ID,
@@ -113,12 +114,12 @@ def format_time(minutes):
 
 # Функция для вычисления времени выполнения скрипта
 def estimate_time(window_cycles, window_count, processed_count, time_per_cycle):
-    remaining_cycles = sum(window_cycles) * window_count - sum(processed_count) # Время на обработку 1 итерации
+    remaining_cycles = sum(window_cycles) - sum(processed_count) # Время на обработку 1 итерации
     total_remaining_time = remaining_cycles * time_per_cycle
     return total_remaining_time
 
-# Время на один цикл — 30 секунд (0.5 минуты)
-time_per_cycle = 0.5
+# Время на один цикл — 27 сек (0.45 минуты)
+time_per_cycle = 0.45
 
 # Основная функция автоматизации
 def automate_viber_process(excel_file, window_cycles, start_rows, window_count, coords, sheet_numbers):
@@ -352,6 +353,15 @@ if __name__ == "__main__":
     # Пауза 3 секунды перед началом выполнения
     print("Начинаем через 3 секунды...")
     time.sleep(3)
+
+    # Получить текущее активное окно
+    active_window = gw.getActiveWindow()
+
+    # Свернуть окно
+    if active_window:
+        active_window.minimize()
+
+    time.sleep(1)
 
     # Запускаем автоматизацию
     automate_viber_process(excel_file, window_cycles, start_rows, window_count, coords, sheet_numbers)
