@@ -112,8 +112,8 @@ def format_time(minutes):
     return time_str
 
 # Функция для вычисления времени выполнения скрипта
-def estimate_time(total_cycles, window_count, processed_count, time_per_cycle):
-    remaining_cycles = total_cycles * window_count - sum(processed_count)  # Время на обработку 1 итерации
+def estimate_time(window_cycles, window_count, processed_count, time_per_cycle):
+    remaining_cycles = sum(window_cycles) * window_count - sum(processed_count) # Время на обработку 1 итерации
     total_remaining_time = remaining_cycles * time_per_cycle
     return total_remaining_time
 
@@ -121,7 +121,7 @@ def estimate_time(total_cycles, window_count, processed_count, time_per_cycle):
 time_per_cycle = 0.5
 
 # Основная функция автоматизации
-def automate_viber_process(excel_file, total_cycles, start_rows, window_count, coords, sheet_numbers):
+def automate_viber_process(excel_file, window_cycles, start_rows, window_count, coords, sheet_numbers):
     global last_processed_rows  # Указываем, что это глобальная переменная
 
     # Чтение данных из всех указанных листов
@@ -133,12 +133,16 @@ def automate_viber_process(excel_file, total_cycles, start_rows, window_count, c
     processed_count = [0] * window_count  # Счетчик обработанных строк для каждого окна
 
     # Ожидаемое время завершения
-    estimated_time_minutes = estimate_time(total_cycles, window_count, processed_count, time_per_cycle)
+    estimated_time_minutes = estimate_time(window_cycles, window_count, processed_count, time_per_cycle)
     formatted_time = format_time(estimated_time_minutes)
     send_telegram_notification(f"Joiner начал работу.\nОжидаемое время завершения через: {formatted_time}")
 
-    for cycle in range(total_cycles):
+    for cycle in range(max(window_cycles)):
         for window_index in range(window_count):
+            if window_cycles[window_index] == 0:
+                print(f"Нет больше циклов для обработки в листе окна {window_index + 1}. Пропуск...")
+                continue  # Пропускаем окна с нулевым количеством циклов
+
             # Проверяем, остались ли строки для обработки
             if start_rows[window_index] >= len(dfs[window_index]):
                 print(f"Нет больше строк для обработки в листе окна {window_index + 1}. Пропуск...")
@@ -198,6 +202,9 @@ def automate_viber_process(excel_file, total_cycles, start_rows, window_count, c
             # Увеличиваем счетчик обработанных строк
             processed_count[window_index] += 1
             print(f"Окно {window_index + 1}: +{processed_count[window_index]} строк обработано")
+
+            # Уменьшаем количество оставшихся циклов для текущего окна
+            window_cycles[window_index] -= 1
 
     print("Все циклы завершены.")
     # Отправка уведомления в Telegram
@@ -278,7 +285,18 @@ if __name__ == "__main__":
         start_rows.append(int(start_row) - 1 if start_row else last_row)
 
     # Запрашиваем количество циклов
-    total_cycles = int(input("Введите количество циклов: "))
+    window_cycles = []
+    for i in range(window_count):
+        while True:
+            try:
+                cycles = int(input(f"Введите количество циклов для окна {i + 1}: "))
+                if cycles < 1:
+                    print("Количество циклов должно быть больше 0.")
+                else:
+                    window_cycles.append(cycles)
+                    break
+            except ValueError:
+                print("Пожалуйста, введите целое число.")
 
     # Проверяем, использовать ли сохраненные координаты для всех окон сразу
     use_saved = input("Использовать сохраненные координаты для всех окон? (y/n): ").strip().lower()
@@ -336,4 +354,4 @@ if __name__ == "__main__":
     time.sleep(3)
 
     # Запускаем автоматизацию
-    automate_viber_process(excel_file, total_cycles, start_rows, window_count, coords, sheet_numbers)
+    automate_viber_process(excel_file, window_cycles, start_rows, window_count, coords, sheet_numbers)
