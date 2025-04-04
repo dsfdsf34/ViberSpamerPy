@@ -145,7 +145,7 @@ def flush_buffer_to_excel(buffer):
 def get_members_count(driver, url):
     """Извлекает количество участников с веб-страницы"""
     driver.get(url)
-    time.sleep(3)  # Ждем загрузки страницы
+    time.sleep(1)  # Ждем загрузки страницы
 
     # Попытка получить количество участников из первого варианта
     try:

@@ -7,146 +7,171 @@ import os
 # Файл для сохранения координат
 COORDINATES_FILE = 'coordinates.json'
 
-
-def save_coordinates(arrow_coords, message_coords, scrollbar_coords):
-    # Сохраняем координаты в JSON файл
+def save_coordinates(arrow_coords, message_coords, scrollbar_coords, drag_coords=None):
     coordinates = {
         'arrow_coords': arrow_coords,
         'message_coords': message_coords,
-        'scrollbar_coords': scrollbar_coords
+        'scrollbar_coords': scrollbar_coords,
+        'drag_coords': drag_coords  # Может быть None, если не используется метод перетаскивания
     }
     with open(COORDINATES_FILE, 'w') as f:
         json.dump(coordinates, f)
 
-
 def load_coordinates():
-    # Загружаем координаты из JSON файла, если файл существует
     if os.path.exists(COORDINATES_FILE):
         with open(COORDINATES_FILE, 'r') as f:
             coordinates = json.load(f)
         return coordinates
     return None
 
+def wait_for_f8(prompt):
+    print(prompt + " (наведите курсор и нажмите F8 для сохранения координат)")
+    keyboard.wait('f8')
+    pos = pyautogui.position()
+    print("Сохранено:", pos)
+    return pos
 
 def drag_scrollbar(scrollbar_top_x, scrollbar_top_y, scrollbar_bottom_y):
     # Перетаскиваем скроллбар вниз
-    pyautogui.click(scrollbar_top_x, scrollbar_top_y)  # Клик на верхнюю часть скроллбара
+    pyautogui.click(scrollbar_top_x, scrollbar_top_y)  # Клик по верхней части скроллбара
     time.sleep(0.2)
-    # Перетаскиваем вниз
-    pyautogui.dragTo(scrollbar_top_x, scrollbar_bottom_y, duration=1)  # Перемещение вниз к нижней части скроллбара
+    pyautogui.dragTo(scrollbar_top_x, scrollbar_bottom_y, duration=1)  # Перемещаемся к нижней части скроллбара
     time.sleep(0.5)
 
+def click_messages(window, message_coords):
+    # Выбираем 12 сообщений поочерёдно с кликами и прокруткой вверх
+    for i in range(12):
+        if keyboard.is_pressed('f8'):
+            print("Скрипт остановлен.")
+            return False
+        x, y = message_coords[window]
+        print(f"Клик по сообщению {i + 1}...")
+        pyautogui.click(x, y)
+        time.sleep(0.2)
+        print("Прокручиваем вверх...")
+        pyautogui.scroll(90)
+        time.sleep(0.2)
+    return True
 
-def forward_messages(num_cycles, num_windows, arrow_coords, message_coords, scrollbar_coords):
-    print("Начинается выполнение скрипта. У вас есть 1 сек, чтобы переключиться на Viber.")
-    time.sleep(1)  # Время для переключения на Viber
+def drag_select_messages(window, drag_coords):
+    # Выделение сообщений перетаскиванием мыши (для двух сообщений)
+    drag_start_x, drag_start_y, drag_end_x, drag_end_y = drag_coords[window]
+    print("Выделение сообщений (перетаскиванием)...")
+    pyautogui.moveTo(drag_start_x, drag_start_y)
+    pyautogui.mouseDown()
+    time.sleep(0.2)
+    pyautogui.moveTo(drag_end_x, drag_end_y, duration=1)
+    pyautogui.mouseUp()
+    time.sleep(0.5)
 
+def forward_messages(num_cycles, num_windows, arrow_coords, message_coords, scrollbar_coords, selection_method, drag_coords):
+    print("Начинается выполнение скрипта. У вас есть 1 секунда, чтобы переключиться на Viber.")
+    time.sleep(1)
     for cycle in range(num_cycles):
         for window in range(num_windows):
-            print(f"Цикл {cycle + 1}, Окно {window + 1}")
-
-            # Проверка нажатия клавиши F8 для остановки
+            print(f"\nЦикл {cycle + 1}, Окно {window + 1}")
             if keyboard.is_pressed('f8'):
                 print("Скрипт остановлен.")
                 return
 
-            # Нажимаем на стрелку "Переслать"
-            arrow_x, arrow_y = arrow_coords[window]
-            print("Клик на стрелку 'Переслать'...")
-            pyautogui.click(arrow_x, arrow_y)
-            time.sleep(5)  # Задержка после клика
+            # 1. Выделение сообщений
+            if selection_method == 2:
+                drag_select_messages(window, drag_coords)
+            elif selection_method == 1:
+                # Если выбран метод клика, просто фокусируемся на области сообщений
+                print("Фокусировка на области сообщений (клик)...")
+                x, y = message_coords[window]
+                pyautogui.click(x, y)
+                time.sleep(0.2)
 
-            # Перетаскиваем скроллбар вниз
+            # 2. Нажатие на стрелку "Переслать"
+            arrow_x, arrow_y = arrow_coords[window]
+            print("Нажатие на стрелку 'Переслать'...")
+            pyautogui.click(arrow_x, arrow_y)
+            time.sleep(5)
+
+            # 3. Прокрутка скроллбара в самый низ
             scrollbar_top_x, scrollbar_top_y, scrollbar_bottom_y = scrollbar_coords[window]
-            print("Перетаскиваем скроллбар вниз...")
+            print("Прокрутка скроллбара в самый низ...")
             drag_scrollbar(scrollbar_top_x, scrollbar_top_y, scrollbar_bottom_y)
 
-            # Пересылаем сообщения
-            for i in range(12):  # Пересылаем до 12 сообщений
-                # Проверка нажатия клавиши F8 для остановки
-                if keyboard.is_pressed('f8'):
-                    print("Скрипт остановлен.")
+            # 4. Выбор 12 сообщений поочерёдно с прокруткой вверх
+            if selection_method == 1:
+                if not click_messages(window, message_coords):
+                    return
+            elif selection_method == 2:
+                # Если метод выделения drag использовался, то дополнительно выбираем сообщения по клику
+                if not click_messages(window, message_coords):
                     return
 
-                # Кликаем по сообщению
-                message_x, message_y = message_coords[window]
-                print(f"Клик по сообщению {i + 1}...")
-                pyautogui.click(message_x, message_y)
-                time.sleep(0.2)  # Задержка для удобства
-
-                # Прокручиваем вверх после клика
-                print("Прокручиваем вверх...")
-                pyautogui.scroll(90)  # Прокрутка вверх на 100 пикселей
-                time.sleep(0.2)  # Задержка для удобства
-
-            # Нажимаем 'enter' после 8 кликов
-            print("Нажимаем 'enter'...")
+            # 5. Нажатие Enter
+            print("Нажатие 'enter'...")
             pyautogui.press('enter')
-            time.sleep(5)  # Небольшая пауза перед переходом к следующему окну или повтором цикла
-
-        # Если есть больше одного окна, мы можем перейти ко второму
+            time.sleep(5)
         if num_windows > 1:
-            print("Переход ко второму окну...")
-            time.sleep(5)  # Пауза перед переключением окна
+            print("Переход к следующему окну...")
+            time.sleep(5)
         else:
             print("Повторяем цикл для одного окна...")
-            time.sleep(5)  # Пауза перед повтором цикла
-
+            time.sleep(5)
 
 if __name__ == "__main__":
-    # Инициализация переменных
-    arrow_coords = [None, None]  # Координаты для 2 окон
-    message_coords = [None, None]  # Координаты сообщений для 2 окон
-    scrollbar_coords = [None, None]  # Координаты скроллбара для 2 окон
+    # В начале скрипта спрашиваем, сколько окон используем
+    try:
+        num_windows = int(input("Введите количество окон Viber (1 или 2): "))
+        if num_windows not in [1, 2]:
+            print("Неверное значение. Будет использовано 1 окно.")
+            num_windows = 1
+    except ValueError:
+        print("Неверное значение. Будет использовано 1 окно.")
+        num_windows = 1
 
-    # Запрос на загрузку координат
-    load_coordinates_answer = input("Хотите загрузить сохраненные координаты? (y/n): ").strip().lower()
+    # Инициализация переменных для каждого окна
+    arrow_coords = [None] * num_windows         # Координаты для кнопки "Переслать"
+    message_coords = [None] * num_windows         # Координаты для клика по сообщению
+    scrollbar_coords = [None] * num_windows       # Координаты скроллбара (верхняя и нижняя точки)
+    drag_coords = [None] * num_windows            # Координаты для перетаскивания (выделение сообщений)
 
-    # Проверяем ответ пользователя
-    if load_coordinates_answer == 'y':
+    # Выбор метода выделения сообщений
+    try:
+        selection_method = int(input("Выберите метод выделения сообщений:\n"
+                                       "1 - Фокусировка (клик по сообщению)\n"
+                                       "2 - Перетаскивание для выделения двух сообщений\n"
+                                       "Ваш выбор (1 или 2): "))
+    except ValueError:
+        selection_method = 1
+
+    # Запрос на загрузку сохранённых координат
+    if input("Хотите загрузить сохраненные координаты? (y/n): ").strip().lower() == 'y':
         coordinates = load_coordinates()
         if coordinates:
             arrow_coords = coordinates['arrow_coords']
             message_coords = coordinates['message_coords']
             scrollbar_coords = coordinates['scrollbar_coords']
+            if selection_method == 2:
+                drag_coords = coordinates.get('drag_coords')
             print("Координаты загружены.")
         else:
-            print("Сохраненные координаты не найдены. Пожалуйста, введите координаты вручную.")
+            print("Сохраненные координаты не найдены. Введите координаты вручную.")
 
-    for window in range(2):  # Запрашиваем координаты для двух окон
-        if arrow_coords[window] is None or message_coords[window] is None or scrollbar_coords[window] is None:
-            print(f"Укажите координаты для окна {window + 1}:")
-            print("Наведите курсор на стрелку 'Переслать'.")
-            time.sleep(5)  # Время для указания координат
-            arrow_coords[window] = pyautogui.position()
-            print("Координаты стрелки 'Переслать' сохранены:", arrow_coords[window])
-
-            print("Теперь наведите курсор на сообщение.")
-            time.sleep(5)  # Время для указания координат
-            message_coords[window] = pyautogui.position()
-            print("Координаты сообщения сохранены:", message_coords[window])
-
-            print("Теперь наведите курсор на верхнюю часть скроллбара.")
-            time.sleep(5)  # Время для указания координат
-            scrollbar_top_x, scrollbar_top_y = pyautogui.position()
-            print("Координаты верхней части скроллбара сохранены:", scrollbar_top_x, scrollbar_top_y)
-
-            print("Теперь наведите курсор на нижнюю часть скроллбара.")
-            time.sleep(5)  # Время для указания координат
-            scrollbar_bottom_x, scrollbar_bottom_y = pyautogui.position()
-            print("Координаты нижней части скроллбара сохранены:", scrollbar_bottom_x, scrollbar_bottom_y)
-
-            # Сохраняем координаты для текущего окна
-            scrollbar_coords[window] = (scrollbar_top_x, scrollbar_top_y, scrollbar_bottom_y)
+    # Если координаты не загружены, запрашиваем их с помощью F8
+    for window in range(num_windows):
+        if arrow_coords[window] is None:
+            arrow_coords[window] = wait_for_f8(f"\nОкно {window + 1}: наведите курсор на стрелку 'Переслать'")
+        if message_coords[window] is None:
+            message_coords[window] = wait_for_f8(f"Окно {window + 1}: наведите курсор на сообщение (для клика)")
+        if scrollbar_coords[window] is None:
+            pos_top = wait_for_f8(f"Окно {window + 1}: наведите курсор на верхнюю часть скроллбара")
+            pos_bottom = wait_for_f8(f"Окно {window + 1}: наведите курсор на нижнюю часть скроллбара")
+            scrollbar_coords[window] = (pos_top.x, pos_top.y, pos_bottom.y)
+        if selection_method == 2 and drag_coords[window] is None:
+            pos_drag_start = wait_for_f8(f"Окно {window + 1}: наведите курсор на верхнее сообщение для выделения")
+            pos_drag_end = wait_for_f8(f"Окно {window + 1}: наведите курсор на нижнее сообщение для выделения")
+            drag_coords[window] = (pos_drag_start.x, pos_drag_start.y, pos_drag_end.x, pos_drag_end.y)
 
     # Сохраняем все координаты
-    save_coordinates(arrow_coords, message_coords, scrollbar_coords)
+    save_coordinates(arrow_coords, message_coords, scrollbar_coords, drag_coords)
 
-    # Запрашиваем ввод пользователя
-    num_cycles = int(input("Введите количество циклов: "))
-    num_windows = int(input("Введите количество окон Viber (1 или 2): "))
-
-    if num_windows not in [1, 2]:
-        print("Пожалуйста, выберите 1 или 2 окна Viber.")
-    else:
-        forward_messages(num_cycles, num_windows, arrow_coords, message_coords, scrollbar_coords)
+    num_cycles = int(input("\nВведите количество циклов: "))
+    forward_messages(num_cycles, num_windows, arrow_coords, message_coords,
+                     scrollbar_coords, selection_method, drag_coords)
