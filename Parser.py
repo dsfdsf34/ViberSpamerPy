@@ -1,7 +1,7 @@
 import time
 import threading
 import json
-import os
+import os, stat
 import subprocess
 import re
 import keyboard
@@ -37,6 +37,15 @@ def kill_chromedriver_process():
         print(f"Ошибка при попытке завершить процесс: {e}")
     except Exception as e:
         print(f"Неизвестная ошибка: {e}")
+
+def safe_start_driver(driver_path, options, retries=2):
+    for i in range(retries):
+        try:
+            return webdriver.Chrome(service=ChromeService(driver_path), options=options)
+        except WebDriverException as e:
+            print(f"Не удалось запустить драйвер (попытка {i+1}): {e}")
+            time.sleep(1)
+    raise RuntimeError("Не удалось запустить ChromeDriver после нескольких попыток")
 
 # Глобальные объекты Lock для синхронизации записи в файлы
 excel_lock = threading.Lock()
@@ -288,12 +297,13 @@ def check_viber_group_status(link, driver, invalid_texts):
         driver.switch_to.window(driver.window_handles[0])
 
 
-def process_links(start_row, end_row, path_to_excel, sheet_name, invalid_texts):
+def process_links(start_row, end_row, path_to_excel, sheet_name, invalid_texts, driver_path):
     """Обработка ссылок в указанном диапазоне строк"""
     print_status(f"Начало обработки ссылок с {start_row} по {end_row} в листе '{sheet_name}'...")
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")  # Запуск в фоновом режиме
-    driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), options=options)
+    driver = safe_start_driver(driver_path, options)
+
     time.sleep(1)  # Задержка на 2 секунды после запуска драйвера
 
     wb = load_workbook(path_to_excel, read_only=True)
@@ -342,6 +352,9 @@ def get_rows_per_thread(start_row, end_row, num_threads):
 
 def main():
     """Основная функция скрипта"""
+    driver_path = ChromeDriverManager().install()
+    # убедимся, что файл исполняемый
+    os.chmod(driver_path, os.stat(driver_path).st_mode | stat.S_IXUSR)
     path_to_excel, sheet_name, start_row, end_row = read_settings()
     use_saved_settings = input("Использовать сохраненные настройки? (y/n): ").lower()
 
@@ -390,7 +403,7 @@ def main():
 
     for i, (thread_start_row, thread_end_row) in enumerate(thread_ranges):
         thread = threading.Thread(target=process_links,
-                                  args=(thread_start_row, thread_end_row, path_to_excel, sheet_name, invalid_texts))
+                                  args=(thread_start_row, thread_end_row, path_to_excel, sheet_name, invalid_texts, driver_path))
         thread.start()
         threads.append(thread)
 
