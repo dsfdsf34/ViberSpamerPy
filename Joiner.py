@@ -168,6 +168,9 @@ def automate_viber_process(excel_file, window_cycles, start_rows, window_count, 
             pyautogui.press('enter')
             random_pause(2, 3)
 
+            pyautogui.scroll(-3000)
+            time.sleep(1)
+
             # 4. Клик на отправленной ссылке
             pyautogui.click(coords['link'][window_index])
             random_pause(3, 4)
